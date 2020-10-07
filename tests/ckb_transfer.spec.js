@@ -1,6 +1,6 @@
 const { tmpdir } = require('os');
-const { join } = require('path');
-const { sync } = require('rimraf');
+const path = require('path');
+const rimraf = require('rimraf');
 const { expect } = require('chai');
 const { Indexer } = require('@ckb-lumos/indexer');
 const CKB = require('@nervosnetwork/ckb-sdk-core').default;
@@ -8,7 +8,7 @@ const {
     NODE_URL, resetBlocks, waitForIndexing, collectCells, calculateTotalCapacities, commitTxs,
 } = require('../utils');
 
-const LUMOS_DB_ROOT = join(tmpdir(), 'lumos_db');
+const LUMOS_DB_ROOT = path.join(tmpdir(), 'lumos_db');
 
 describe('tests for transfering ckb', () => {
     let indexer;
@@ -30,7 +30,7 @@ describe('tests for transfering ckb', () => {
     const fee = 100000n;
 
     beforeEach(async () => {
-        lumosDBPath = join(LUMOS_DB_ROOT, Date.now().toString());
+        lumosDBPath = path.join(LUMOS_DB_ROOT, Date.now().toString());
         indexer = new Indexer(NODE_URL, lumosDBPath);
         await resetBlocks();
         await waitForIndexing(indexer);
@@ -67,7 +67,7 @@ describe('tests for transfering ckb', () => {
     });
 
     afterEach(async () => {
-        sync(lumosDBPath);
+        rimraf.sync(lumosDBPath);
     });
 
     it('output capacities equal to the remaining amount', async () => {
