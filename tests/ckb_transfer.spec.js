@@ -1,9 +1,9 @@
 const { tmpdir } = require('os');
 const { join } = require('path');
 const { sync } = require('rimraf');
-const CKB = require('@nervosnetwork/ckb-sdk-core').default;
-const { Indexer } = require('@ckb-lumos/indexer');
 const { expect } = require('chai');
+const { Indexer } = require('@ckb-lumos/indexer');
+const CKB = require('@nervosnetwork/ckb-sdk-core').default;
 const {
     NODE_URL, resetBlocks, waitForIndexing, collectCells, calculateTotalCapacities, commitTxs,
 } = require('../utils');

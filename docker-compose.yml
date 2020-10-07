@@ -1,0 +1,9 @@
+version: "3.5"
+services:
+  ckb-dev-node:
+    build:
+      context: ./docker/ckb/
+    environment:
+      CKB_CHAIN: dev
+    ports:
+      - "8554:8114"
