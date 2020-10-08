@@ -46,6 +46,7 @@ const commitTxs = async () => {
     await generateBlock();
     await generateBlock();
     await generateBlock();
+    await generateBlock();
 };
 
 const getTipBlockNumber = async () => axios({
