@@ -1,8 +1,9 @@
 const fs = require('fs');
 const { expect } = require('chai');
+const path = require('path');
 const {
-    IndexerWrapper, getCKBSDK, resetBlocks, calculateTotalCapacities, sendTransaction,
-} = require('../utils');
+    IndexerWrapper, getCKBSDK, resetBlocks, calculateTotalCapacities, sendTransaction, BufferParser,
+} = require('../../utils');
 
 describe('sudt', () => {
     let indexer;
@@ -51,14 +52,22 @@ describe('sudt', () => {
     });
 
     it('capacity equals to genesis issuance', async () => {
-        const cells = await indexer.collectCells(defaultLockScript);
+        const cells = await indexer.collectCells({ lock: defaultLockScript });
         totalCapacity = calculateTotalCapacities(cells);
-        expect(totalCapacity).to.equal(1000000000000000000n);
+        expect(totalCapacity.toString()).to.equal('1000000000000000000');
     });
 
     describe('deploy', () => {
+        let typeIdScript;
+        const sudtCellDep = {
+            outPoint: {
+                txHash: null,
+                index: '0x0',
+            },
+            depType: 'code',
+        };
         beforeEach(async () => {
-            const cells = await indexer.collectCells(defaultLockScript);
+            const cells = await indexer.collectCells({ lock: defaultLockScript });
             totalCapacity = calculateTotalCapacities(cells);
 
             const rawTx = ckb.generateRawTransaction({
@@ -72,14 +81,14 @@ describe('sudt', () => {
             });
 
             const typeIdHash = calculateTypeIdHash(rawTx.inputs[0].previousOutput);
-
-            rawTx.outputs[0].type = {
+            typeIdScript = {
                 hashType: 'type',
                 codeHash: '0x00000000000000000000000000000000000000000000000000545950455f4944',
                 args: typeIdHash,
             };
+            rawTx.outputs[0].type = typeIdScript;
 
-            const udtBinaryPath = '/Users/kata/repos/dev/nervos/ckb-minimal-udt/src/udt';
+            const udtBinaryPath = path.join(__dirname, './udt');
             const udtBinaryData = fs.readFileSync(udtBinaryPath);
 
             const scriptDataHex = ckb.utils.bytesToHex(udtBinaryData);
@@ -92,16 +101,64 @@ describe('sudt', () => {
             }));
             signedTx = ckb.signTransaction(privateKey)(rawTx);
 
-            await sendTransaction(signedTx);
+            const txHash = await sendTransaction(signedTx);
+            sudtCellDep.outPoint.txHash = txHash;
         });
         it('output capacities equal to the remaining amount', async () => {
-            const cells = await indexer.collectCells(defaultLockScript);
+            const cells = await indexer.collectCells({ lock: defaultLockScript });
 
             const remainingAmount = totalCapacity - fee;
-            expect(calculateTotalCapacities(cells)).to.equal(remainingAmount);
+            expect(calculateTotalCapacities(cells).toString()).to.equal(remainingAmount.toString());
         });
         describe('issuance', () => {
+            let uuid;
+            const issuanceAmount = BigInt('10000000000000000000000000000');
+
             beforeEach(async () => {
+                const cells = await indexer.collectCells({ lock: defaultLockScript });
+                totalCapacity = calculateTotalCapacities(cells);
+
+                const rawTx = ckb.generateRawTransaction({
+                    fromAddress: ADDRESS,
+                    toAddress: ADDRESS,
+                    capacity: transferAmount,
+                    fee,
+                    safeMode: false,
+                    cells,
+                    deps: deps.secp256k1Dep,
+                });
+
+                uuid = ckb.utils.scriptToHash(defaultLockScript);
+
+                rawTx.outputs[0].type = {
+                    args: uuid,
+                    hashType: 'type',
+                    codeHash: ckb.utils.scriptToHash(typeIdScript),
+                };
+
+                rawTx.outputsData[0] = BufferParser.writeBigUInt128LE(issuanceAmount);
+
+                rawTx.cellDeps.push(sudtCellDep);
+
+                rawTx.witnesses = rawTx.inputs.map((_, i) => (i > 0 ? '0x' : {
+                    lock: '',
+                    inputType: '',
+                    outputType: '',
+                }));
+                signedTx = ckb.signTransaction(privateKey)(rawTx);
+
+                await sendTransaction(signedTx);
+            });
+            it('issued sudt', async () => {
+                const type = {
+                    args: uuid,
+                    hashType: 'type',
+                    codeHash: ckb.utils.scriptToHash(typeIdScript),
+                };
+                const cells = await indexer.collectCells({ type });
+                expect(cells.length).to.equal(1);
+                expect(BufferParser.parseAmountFromSUDTData(cells[0].data).toString())
+                    .to.equal(issuanceAmount.toString());
             });
         });
     });

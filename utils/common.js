@@ -117,8 +117,9 @@ const getCKBSDK = () => {
 
 const sendTransaction = async (signedTx) => {
     const ckb = getCKBSDK();
-    await ckb.rpc.sendTransaction(signedTx);
+    const txHash = await ckb.rpc.sendTransaction(signedTx);
     await commitTxs();
+    return txHash;
 };
 
 const calculateTotalCapacities = (cells) => cells.reduce(

@@ -38,13 +38,13 @@ describe('ckb transfers', () => {
     });
 
     it('capacity equals to genesis issuance', async () => {
-        const cells = await indexer.collectCells(defaultLockScript);
+        const cells = await indexer.collectCells({ lock: defaultLockScript });
         totalCapacity = calculateTotalCapacities(cells);
-        expect(totalCapacity).to.equal(1000000000000000000n);
+        expect(totalCapacity.toString()).to.equal('1000000000000000000');
     });
     describe('after transfered to itself', () => {
         beforeEach(async () => {
-            const cells = await indexer.collectCells(defaultLockScript);
+            const cells = await indexer.collectCells({ lock: defaultLockScript });
             totalCapacity = calculateTotalCapacities(cells);
 
             const rawTx = ckb.generateRawTransaction({
@@ -66,14 +66,14 @@ describe('ckb transfers', () => {
             await sendTransaction(signedTx);
         });
         it('output capacities equal to the remaining amount', async () => {
-            const cells = await indexer.collectCells(defaultLockScript);
+            const cells = await indexer.collectCells({ lock: defaultLockScript });
 
             const remainingAmount = totalCapacity - fee;
-            expect(remainingAmount).to.equal(calculateTotalCapacities(cells));
+            expect(remainingAmount.toString()).to.equal(calculateTotalCapacities(cells).toString());
         });
 
         it('indexed cells equal to outputs in generated tx', async () => {
-            const cells = await indexer.collectCells(defaultLockScript);
+            const cells = await indexer.collectCells({ lock: defaultLockScript });
             expect(signedTx.outputs.length).to.equal(cells.length);
         });
     });

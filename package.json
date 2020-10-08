@@ -4,8 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "mocha tests --timeout=10000",
-    "pretest": "npm run lint",
+    "test": "mocha 'tests/**/*.spec.js' --timeout=10000",
     "lint": "eslint '**/*.js' --ignore-pattern node_modules/"
   },
   "author": "",

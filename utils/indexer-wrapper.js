@@ -35,27 +35,38 @@ class IndexerWrapper {
         }
     }
 
-    async collectCells(lockScript) {
+    async collectCells({ lock, type }) {
         await this.waitForIndexing();
 
-        const collector = new CellCollector(this.indexer, {
-            lock: {
-                code_hash: lockScript.codeHash,
-                hash_type: lockScript.hashType,
-                args: lockScript.args,
-            },
-        });
+        const query = {};
+        if (lock) {
+            query.lock = {
+                code_hash: lock.codeHash,
+                hash_type: lock.hashType,
+                args: lock.args,
+            };
+        }
+        if (type) {
+            query.type = {
+                code_hash: type.codeHash,
+                hash_type: type.hashType,
+                args: type.args,
+            };
+        }
+        const collector = new CellCollector(this.indexer, query);
 
         const cells = [];
 
         for await (const cell of collector.collect()) {
             cells.push({
                 type: cell.cell_output.type || null,
+                lock: cell.cell_output.lock || null,
                 capacity: cell.cell_output.capacity,
                 outPoint: {
                     txHash: cell.out_point.tx_hash,
                     index: cell.out_point.index,
                 },
+                data: cell.data,
             });
         }
 
