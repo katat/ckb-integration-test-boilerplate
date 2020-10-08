@@ -8,7 +8,7 @@ It aims to facilitate creating tests to verify the behaviors of contracts that c
 docker-compose up
 ```
 
-You will need to install [docker-compose](https://docs.docker.com/compose/install/) before running the following command.
+You will need to install [docker-compose](https://docs.docker.com/compose/install/) before running the command above.
 
 To tune the settings of the CKB dev node, such as enable certain modules or genesis issuance etc, please refer to the configuration files in the `docker/ckb` folder.
 
