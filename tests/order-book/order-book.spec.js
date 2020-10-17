@@ -10,22 +10,20 @@ describe('order book', () => {
     let deps;
     let defaultLockScript;
 
-    let signedTx;
-
     const ckb = getCKBSDK();
     const privateKey = '0x01829817e4dead9ec93822574313c74eab20e308e4c9af476f28515aea4f8a2f';
     const publicKey = ckb.utils.privateKeyToPublicKey(privateKey);
-    const publicKeyHash = `0x${ckb.utils.blake160(publicKey, 'hex')}`;
+    const rootPublicKeyHash = `0x${ckb.utils.blake160(publicKey, 'hex')}`;
 
-    const alicePrivateKey = '0x01829817e4dead9ec93822574313c74eab20e308e4c9af476f28515aea4f8a1f';
+    const alicePrivateKey = '0x650f2b74920bc2a3e5e33e5909cac206e38fc5fe8cb8b1596bf631a60057ff0e';
     const alicePublicKey = ckb.utils.privateKeyToPublicKey(alicePrivateKey);
     const alicePublicKeyHash = `0x${ckb.utils.blake160(alicePublicKey, 'hex')}`;
 
-    const bobPrivateKey = '0x01829817e4dead9ec93822574313c74eab20e308e4c9af476f28515aea4f8a0f';
+    const bobPrivateKey = '0x41f44f049b66b2d095d2c66a04b11b518feb6947b999e2b3d2fc2725e891e273';
     const bobPublicKey = ckb.utils.privateKeyToPublicKey(bobPrivateKey);
     const bobPublicKeyHash = `0x${ckb.utils.blake160(bobPublicKey, 'hex')}`;
 
-    const dealmakerPrivateKey = '0x01829817e4dead9ec93822574313c74eab20e308e4c9af476f28515aea4f8b0f';
+    const dealmakerPrivateKey = '0x44c3c2baf6559ae80516486dc08ce023f6a3911152600c456093c0ad03001d32';
     const dealmakerPublicKey = ckb.utils.privateKeyToPublicKey(dealmakerPrivateKey);
     const dealmakerPublicKeyHash = `0x${ckb.utils.blake160(dealmakerPublicKey, 'hex')}`;
 
@@ -54,17 +52,28 @@ describe('order book', () => {
         defaultLockScript = {
             hashType: 'type',
             codeHash: deps.secp256k1Dep.codeHash,
-            args: publicKeyHash,
+            args: rootPublicKeyHash,
         };
     });
 
     describe('deploy sudt', () => {
         let typeIdScript;
-        let scriptDataHex;
+        let udtScriptDataHex;
+        let orderLockScriptDataHex;
+        let orderLockCodeHash;
+        // let secp256k1SignAllScriptDataHex;
+
         const sudtCellDep = {
             outPoint: {
                 txHash: null,
-                index: '0x0',
+                index: null,
+            },
+            depType: 'code',
+        };
+        const orderCellDep = {
+            outPoint: {
+                txHash: null,
+                index: null,
             },
             depType: 'code',
         };
@@ -99,7 +108,7 @@ describe('order book', () => {
             }));
 
             tx.outputs = outputs.map((output) => ({
-                capacity: `0x${(BigInt(output.ckb) * 10n ** 8n).toString(16)}`,
+                capacity: output.ckbBN ? `0x${output.ckbBN.toString(16)}` : `0x${(BigInt(output.ckb) * 10n ** 8n).toString(16)}`,
                 lock: formatScript(output.lock),
                 type: formatScript(output.type),
             }));
@@ -118,10 +127,23 @@ describe('order book', () => {
         beforeEach(async () => {
             const cells = await indexer.collectCells({ lock: defaultLockScript });
 
-            const udtBinaryPath = path.join(__dirname, './udt');
+            const udtBinaryPath = path.join(__dirname, './simple_udt');
             const udtBinaryData = fs.readFileSync(udtBinaryPath);
+            udtScriptDataHex = ckb.utils.bytesToHex(udtBinaryData);
 
-            scriptDataHex = ckb.utils.bytesToHex(udtBinaryData);
+            const orderLockBinaryPath = path.join('/Users/kata/repos/dev/nervos/ckb-dex-contract', 'build/release/ckb-dex-contract');
+            const orderLockBinaryData = fs.readFileSync(orderLockBinaryPath);
+            orderLockScriptDataHex = ckb.utils.bytesToHex(orderLockBinaryData);
+
+            const b = ckb.utils.blake2b(32, null, null, ckb.utils.PERSONAL);
+            b.update(orderLockBinaryData);
+            orderLockCodeHash = `0x${b.digest('hex')}`;
+
+            // orderLockCodeHash = `0x${ckb.utils.blake160(orderLockScriptDataHex, 'hex')}`;
+
+            // const secp256k1SignAllBinaryPath = path.join(__dirname, './udt');
+            // const secp256k1SignAllBinaryData = fs.readFileSync(secp256k1SignAllBinaryPath);
+            // secp256k1SignAllScriptDataHex = ckb.utils.bytesToHex(secp256k1SignAllBinaryData);
 
             const input = cells.find((cell) => cell.data === '0x');
 
@@ -133,26 +155,44 @@ describe('order book', () => {
             };
 
             const inputs = [input];
-            const outputs = [{
-                ckb: 200000n,
-                lock: input.lock,
-                type: typeIdScript,
-                data: scriptDataHex,
-            }, {
-                ckb: 2000000n,
-                lock: input.lock,
-            }];
+            const outputs = [
+                {
+                    ckb: 200000n,
+                    lock: input.lock,
+                    type: typeIdScript,
+                    data: udtScriptDataHex,
+                },
+                {
+                    ckb: 200000n,
+                    lock: input.lock,
+                    data: orderLockScriptDataHex,
+                },
+                // {
+                //     ckb: 200000n,
+                //     lock: input.lock,
+                //     data: secp256k1SignAllScriptDataHex,
+                // },
+                {
+                    ckb: 2000000n,
+                    lock: input.lock,
+                },
+            ];
 
             const rawTx = await generateRawTx(inputs, outputs);
-            signedTx = ckb.signTransaction(privateKey)(rawTx);
+            const signedTx = ckb.signTransaction(privateKey)(rawTx);
 
             const txHash = await sendTransaction(signedTx);
+
             sudtCellDep.outPoint.txHash = txHash;
+            sudtCellDep.outPoint.index = '0x0';
+
+            orderCellDep.outPoint.txHash = txHash;
+            orderCellDep.outPoint.index = '0x1';
         });
         it('deployed type id script for sudt', async () => {
             const cells = await indexer.collectCells({ type: typeIdScript });
             expect(cells.length).to.equal(1);
-            expect(cells[0].data).to.equal(scriptDataHex);
+            expect(cells[0].data).to.equal(udtScriptDataHex);
         });
         describe('issuance', () => {
             let uuid;
@@ -177,8 +217,7 @@ describe('order book', () => {
                 }];
 
                 const rawTx = await generateRawTx(inputs, outputs, [sudtCellDep]);
-                signedTx = ckb.signTransaction(privateKey)(rawTx);
-
+                const signedTx = ckb.signTransaction(privateKey)(rawTx);
                 await sendTransaction(signedTx);
             });
             it('issued sudt', async () => {
@@ -229,7 +268,7 @@ describe('order book', () => {
                     }];
 
                     const rawTx = await generateRawTx(inputs, outputs, [sudtCellDep]);
-                    signedTx = ckb.signTransaction(privateKey)(rawTx);
+                    const signedTx = ckb.signTransaction(privateKey)(rawTx);
 
                     await sendTransaction(signedTx);
                 });
@@ -244,16 +283,16 @@ describe('order book', () => {
                     expect(cells.length).to.equal(1);
                     expect(totalAmount.toString()).to.equal((issuanceAmount / 2n).toString());
                 });
-                it('transfers sudt to bob', async () => {
+                it('transfers ckb to bob', async () => {
                     const cells = await indexer.collectCells({
                         lock: { ...defaultLockScript, args: bobPublicKeyHash },
                     });
                     const totalAmount = cells.reduce(
-                        (total, cell) => total + BufferParser.parseAmountFromSUDTData(cell.data),
+                        (total, cell) => total + BigInt(cell.capacity),
                         BigInt(0),
                     );
                     expect(cells.length).to.equal(1);
-                    expect(totalAmount.toString()).to.equal((issuanceAmount / 2n).toString());
+                    expect(formatCKB(totalAmount).toString()).to.equal((20000n).toString());
                 });
                 it('transfers ckb to dealmaker', async () => {
                     const cells = await indexer.collectCells({
@@ -267,11 +306,192 @@ describe('order book', () => {
                     expect(formatCKB(totalAmount).toString()).to.equal((20000n).toString());
                 });
                 describe('create order cells', () => {
+                    const formatOrderData = (currentAmount, tradedAmount, orderAmount, price, isBid) => {
+                        const udtAmountHex = BufferParser.writeBigUInt128LE(currentAmount);
+                        const tradedAmountHex = BufferParser.writeBigUInt128LE(tradedAmount).replace('0x', '');
+                        const orderAmountHex = BufferParser.writeBigUInt128LE(orderAmount).replace('0x', '');
+
+                        const priceBuf = Buffer.alloc(8);
+                        priceBuf.writeBigUInt64LE(price);
+                        const priceHex = `${priceBuf.toString('hex')}`;
+
+                        const bidOrAskBuf = Buffer.alloc(1);
+                        bidOrAskBuf.writeInt8(isBid ? 0 : 1);
+                        const isBidHex = `${bidOrAskBuf.toString('hex')}`;
+
+                        const dataHex = udtAmountHex + tradedAmountHex + orderAmountHex + priceHex + isBidHex;
+                        return dataHex;
+                    };
+                    const generateCreateOrderTx = async ({
+                        publicKeyHash,
+                        currentAmount,
+                        tradedAmount,
+                        orderAmount,
+                        price,
+                        isBid,
+                        ckb,
+                    }) => {
+                        const cells = await indexer.collectCells({
+                            lock: { ...defaultLockScript, args: publicKeyHash },
+                        });
+
+                        const orderLock = {
+                            codeHash: orderLockCodeHash,
+                            hashType: 'data',
+                            args: publicKeyHash,
+                        };
+
+                        const inputs = [cells[0]];
+                        const outputs = [{
+                            ckb,
+                            type: cells[0].type,
+                            lock: orderLock,
+                            data: formatOrderData(currentAmount, tradedAmount, orderAmount, price, isBid),
+                        }];
+
+                        const rawTx = await generateRawTx(inputs, outputs, [sudtCellDep]);
+                        return rawTx;
+                    };
                     beforeEach(async () => {
+                        const aliceRawTx = await generateCreateOrderTx({
+                            publicKeyHash: alicePublicKeyHash,
+                            currentAmount: 5000000000n,
+                            tradedAmount: 5000000000n,
+                            orderAmount: 15000000000n,
+                            price: 50000000000n,
+                            isBid: true,
+                            ckb: 2000n,
+                        });
+                        await sendTransaction(ckb.signTransaction(alicePrivateKey)(aliceRawTx));
 
+                        const bobRawTx = await generateCreateOrderTx({
+                            publicKeyHash: bobPublicKeyHash,
+                            currentAmount: 50000000000n,
+                            tradedAmount: 10000000000n,
+                            orderAmount: 20000000000n,
+                            price: 50000000000n,
+                            isBid: false,
+                            ckb: 800n,
+                        });
+                        await sendTransaction(ckb.signTransaction(bobPrivateKey)(bobRawTx));
                     });
-                    describe('create trades', () => {
+                    describe('verify trades', () => {
+                        let aliceOrderLock;
+                        let bobOrderLock;
+                        let dealmakerDefaultLock;
+                        let inputs;
+                        let outputs;
+                        beforeEach(async () => {
+                            aliceOrderLock = {
+                                codeHash: orderLockCodeHash,
+                                hashType: 'data',
+                                args: alicePublicKeyHash,
+                            };
+                            bobOrderLock = {
+                                codeHash: orderLockCodeHash,
+                                hashType: 'data',
+                                args: bobPublicKeyHash,
+                            };
+                            dealmakerDefaultLock = {
+                                ...defaultLockScript,
+                                args: dealmakerPublicKeyHash,
+                            };
+                            const aliceOrderCells = await indexer.collectCells({
+                                lock: aliceOrderLock,
+                            });
+                            const bobOrderCells = await indexer.collectCells({
+                                lock: bobOrderLock,
+                            });
+                            const dealmakerCells = await indexer.collectCells({
+                                lock: dealmakerDefaultLock,
+                            });
 
+                            inputs = [
+                                dealmakerCells[0],
+                                aliceOrderCells[0],
+                                bobOrderCells[0],
+                            ];
+
+                            const tradeFee = 1000000n;
+                            outputs = [
+                                {
+                                    ...dealmakerCells[0],
+                                    ckbBN: 2000225000000n - tradeFee,
+                                },
+                                {
+                                    lock: aliceOrderCells[0].lock,
+                                    type: aliceOrderCells[0].type,
+                                    ckbBN: 124775000000n,
+                                    data: BufferParser.writeBigUInt128LE(20000000000n),
+                                },
+                                {
+                                    lock: bobOrderCells[0].lock,
+                                    type: bobOrderCells[0].type,
+                                    ckbBN: 155000000000n,
+                                    data: formatOrderData(34955000000n, 25000000000n, 5000000000n, 50000000000n, false),
+                                },
+                            ];
+                        });
+                        describe('create trades', () => {
+                            beforeEach(async () => {
+                                const rawTx = await generateRawTx(inputs, outputs, [sudtCellDep, orderCellDep]);
+                                const signedTx = rawTx;
+                                const signedWitnesses = ckb.signWitnesses(dealmakerPrivateKey)({
+                                    transactionHash: ckb.utils.rawTransactionToHash(rawTx),
+                                    witnesses: [rawTx.witnesses[0]],
+                                });
+                                signedTx.witnesses[0] = signedWitnesses[0];
+
+                                await sendTransaction(signedTx);
+                            });
+                            it('updates the indexer data', async () => {
+                                const aliceOrderCells = await indexer.collectCells({
+                                    lock: aliceOrderLock,
+                                });
+                                const bobOrderCells = await indexer.collectCells({
+                                    lock: bobOrderLock,
+                                });
+                                const dealmakerCells = await indexer.collectCells({
+                                    lock: dealmakerDefaultLock,
+                                });
+
+                                expect(BigInt(dealmakerCells[0].capacity).toString()).to.equal('2000224000000');
+
+                                expect(BigInt(aliceOrderCells[0].capacity).toString()).to.equal('124775000000');
+                                expect(BufferParser.parseAmountFromSUDTData(aliceOrderCells[0].data.slice(0, 34)).toString()).to.equal('20000000000');
+                                expect(BufferParser.parseAmountFromSUDTData(`0x${aliceOrderCells[0].data.slice(34, 66)}`).toString()).to.equal('0');
+                                expect(BufferParser.parseAmountFromSUDTData(`0x${aliceOrderCells[0].data.slice(66, 98)}`).toString()).to.equal('0');
+
+                                expect(BigInt(bobOrderCells[0].capacity).toString()).to.equal('155000000000');
+                                expect(BufferParser.parseAmountFromSUDTData(bobOrderCells[0].data.slice(0, 34)).toString()).to.equal('34955000000');
+                                expect(BufferParser.parseAmountFromSUDTData(`0x${bobOrderCells[0].data.slice(34, 66)}`).toString()).to.equal('25000000000');
+                                expect(BufferParser.parseAmountFromSUDTData(`0x${bobOrderCells[0].data.slice(66, 98)}`).toString()).to.equal('5000000000');
+                            });
+                        });
+                        describe('deal maker tries to modify trade intention', () => {
+                            beforeEach(async () => {
+                                // deal maker modifies order intention from bid to ask
+                                outputs[2].data = formatOrderData(34955000000n, 25000000000n, 5000000000n, 50000000000n, true);
+                            });
+                            it('order lock contract rejects', async () => {
+                                let err = null;
+                                try {
+                                    const rawTx = await generateRawTx(inputs, outputs, [sudtCellDep, orderCellDep]);
+                                    const signedTx = rawTx;
+                                    const signedWitnesses = ckb.signWitnesses(dealmakerPrivateKey)({
+                                        transactionHash: ckb.utils.rawTransactionToHash(rawTx),
+                                        witnesses: [rawTx.witnesses[0]],
+                                    });
+                                    signedTx.witnesses[0] = signedWitnesses[0];
+
+                                    await sendTransaction(signedTx);
+                                } catch (error) {
+                                    err = error;
+                                }
+
+                                expect(err).not.equal(null);
+                            });
+                        });
                     });
                 });
             });

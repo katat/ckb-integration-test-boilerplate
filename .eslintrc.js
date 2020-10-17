@@ -20,5 +20,6 @@ module.exports = {
         'no-restricted-syntax': 'off',
         'no-console': 'off',
         'max-len': 'off',
+        'prefer-destructuring': 'off',
     },
 };

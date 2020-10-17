@@ -1,4 +1,4 @@
-FROM nervos/ckb:v0.35.0
+FROM nervos/ckb:v0.35.1
 
 USER root
 COPY ./spec.dev.toml /spec.dev.toml
