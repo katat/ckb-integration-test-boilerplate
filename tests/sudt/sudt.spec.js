@@ -110,7 +110,7 @@ describe('sudt', () => {
         beforeEach(async () => {
             const cells = await indexer.collectCells({ lock: defaultLockScript });
 
-            const udtBinaryPath = path.join(__dirname, './udt');
+            const udtBinaryPath = path.join(__dirname, './simple_udt');
             const udtBinaryData = fs.readFileSync(udtBinaryPath);
 
             scriptDataHex = ckb.utils.bytesToHex(udtBinaryData);
