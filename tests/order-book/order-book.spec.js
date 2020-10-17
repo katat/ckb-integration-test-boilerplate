@@ -352,99 +352,52 @@ describe('order book', () => {
                         const rawTx = await generateRawTx(inputs, outputs, [sudtCellDep]);
                         return rawTx;
                     };
-                    beforeEach(async () => {
-                        const aliceRawTx = await generateCreateOrderTx({
-                            publicKeyHash: alicePublicKeyHash,
-                            currentAmount: 5000000000n,
-                            tradedAmount: 5000000000n,
-                            orderAmount: 15000000000n,
-                            price: 50000000000n,
-                            isBid: true,
-                            ckb: 2000n,
-                        });
-                        await sendTransaction(ckb.signTransaction(alicePrivateKey)(aliceRawTx));
-
-                        const bobRawTx = await generateCreateOrderTx({
-                            publicKeyHash: bobPublicKeyHash,
-                            currentAmount: 50000000000n,
-                            tradedAmount: 10000000000n,
-                            orderAmount: 20000000000n,
-                            price: 50000000000n,
-                            isBid: false,
-                            ckb: 800n,
-                        });
-                        await sendTransaction(ckb.signTransaction(bobPrivateKey)(bobRawTx));
-                    });
-                    describe('verify trades', () => {
-                        let aliceOrderLock;
-                        let bobOrderLock;
-                        let dealmakerDefaultLock;
-                        let inputs;
-                        let outputs;
+                    describe('with orders having exact prices matched', () => {
+                        const price = 50000000000n;
                         beforeEach(async () => {
-                            aliceOrderLock = {
-                                codeHash: orderLockCodeHash,
-                                hashType: 'data',
-                                args: alicePublicKeyHash,
-                            };
-                            bobOrderLock = {
-                                codeHash: orderLockCodeHash,
-                                hashType: 'data',
-                                args: bobPublicKeyHash,
-                            };
-                            dealmakerDefaultLock = {
-                                ...defaultLockScript,
-                                args: dealmakerPublicKeyHash,
-                            };
-                            const aliceOrderCells = await indexer.collectCells({
-                                lock: aliceOrderLock,
+                            const aliceRawTx = await generateCreateOrderTx({
+                                publicKeyHash: alicePublicKeyHash,
+                                currentAmount: 5000000000n,
+                                tradedAmount: 5000000000n,
+                                orderAmount: 15000000000n,
+                                price,
+                                isBid: true,
+                                ckb: 2000n,
                             });
-                            const bobOrderCells = await indexer.collectCells({
-                                lock: bobOrderLock,
-                            });
-                            const dealmakerCells = await indexer.collectCells({
-                                lock: dealmakerDefaultLock,
-                            });
+                            await sendTransaction(ckb.signTransaction(alicePrivateKey)(aliceRawTx));
 
-                            inputs = [
-                                dealmakerCells[0],
-                                aliceOrderCells[0],
-                                bobOrderCells[0],
-                            ];
-
-                            const tradeFee = 1000000n;
-                            outputs = [
-                                {
-                                    ...dealmakerCells[0],
-                                    ckbBN: 2000225000000n - tradeFee,
-                                },
-                                {
-                                    lock: aliceOrderCells[0].lock,
-                                    type: aliceOrderCells[0].type,
-                                    ckbBN: 124775000000n,
-                                    data: BufferParser.writeBigUInt128LE(20000000000n),
-                                },
-                                {
-                                    lock: bobOrderCells[0].lock,
-                                    type: bobOrderCells[0].type,
-                                    ckbBN: 155000000000n,
-                                    data: formatOrderData(34955000000n, 25000000000n, 5000000000n, 50000000000n, false),
-                                },
-                            ];
+                            const bobRawTx = await generateCreateOrderTx({
+                                publicKeyHash: bobPublicKeyHash,
+                                currentAmount: 50000000000n,
+                                tradedAmount: 10000000000n,
+                                orderAmount: 20000000000n,
+                                price,
+                                isBid: false,
+                                ckb: 800n,
+                            });
+                            await sendTransaction(ckb.signTransaction(bobPrivateKey)(bobRawTx));
                         });
-                        describe('create trades', () => {
+                        describe('setup trades', () => {
+                            let aliceOrderLock;
+                            let bobOrderLock;
+                            let dealmakerDefaultLock;
+                            let inputs;
+                            let outputs;
                             beforeEach(async () => {
-                                const rawTx = await generateRawTx(inputs, outputs, [sudtCellDep, orderCellDep]);
-                                const signedTx = rawTx;
-                                const signedWitnesses = ckb.signWitnesses(dealmakerPrivateKey)({
-                                    transactionHash: ckb.utils.rawTransactionToHash(rawTx),
-                                    witnesses: [rawTx.witnesses[0]],
-                                });
-                                signedTx.witnesses[0] = signedWitnesses[0];
-
-                                await sendTransaction(signedTx);
-                            });
-                            it('updates the indexer data', async () => {
+                                aliceOrderLock = {
+                                    codeHash: orderLockCodeHash,
+                                    hashType: 'data',
+                                    args: alicePublicKeyHash,
+                                };
+                                bobOrderLock = {
+                                    codeHash: orderLockCodeHash,
+                                    hashType: 'data',
+                                    args: bobPublicKeyHash,
+                                };
+                                dealmakerDefaultLock = {
+                                    ...defaultLockScript,
+                                    args: dealmakerPublicKeyHash,
+                                };
                                 const aliceOrderCells = await indexer.collectCells({
                                     lock: aliceOrderLock,
                                 });
@@ -455,27 +408,34 @@ describe('order book', () => {
                                     lock: dealmakerDefaultLock,
                                 });
 
-                                expect(BigInt(dealmakerCells[0].capacity).toString()).to.equal('2000224000000');
+                                inputs = [
+                                    dealmakerCells[0],
+                                    aliceOrderCells[0],
+                                    bobOrderCells[0],
+                                ];
 
-                                expect(BigInt(aliceOrderCells[0].capacity).toString()).to.equal('124775000000');
-                                expect(BufferParser.parseAmountFromSUDTData(aliceOrderCells[0].data.slice(0, 34)).toString()).to.equal('20000000000');
-                                expect(BufferParser.parseAmountFromSUDTData(`0x${aliceOrderCells[0].data.slice(34, 66)}`).toString()).to.equal('0');
-                                expect(BufferParser.parseAmountFromSUDTData(`0x${aliceOrderCells[0].data.slice(66, 98)}`).toString()).to.equal('0');
-
-                                expect(BigInt(bobOrderCells[0].capacity).toString()).to.equal('155000000000');
-                                expect(BufferParser.parseAmountFromSUDTData(bobOrderCells[0].data.slice(0, 34)).toString()).to.equal('34955000000');
-                                expect(BufferParser.parseAmountFromSUDTData(`0x${bobOrderCells[0].data.slice(34, 66)}`).toString()).to.equal('25000000000');
-                                expect(BufferParser.parseAmountFromSUDTData(`0x${bobOrderCells[0].data.slice(66, 98)}`).toString()).to.equal('5000000000');
+                                const tradeFee = 1000000n;
+                                outputs = [
+                                    {
+                                        ...dealmakerCells[0],
+                                        ckbBN: 2000225000000n - tradeFee,
+                                    },
+                                    {
+                                        lock: aliceOrderCells[0].lock,
+                                        type: aliceOrderCells[0].type,
+                                        ckbBN: 124775000000n,
+                                        data: BufferParser.writeBigUInt128LE(20000000000n),
+                                    },
+                                    {
+                                        lock: bobOrderCells[0].lock,
+                                        type: bobOrderCells[0].type,
+                                        ckbBN: 155000000000n,
+                                        data: formatOrderData(34955000000n, 25000000000n, 5000000000n, price, false),
+                                    },
+                                ];
                             });
-                        });
-                        describe('deal maker tries to modify trade intention', () => {
-                            beforeEach(async () => {
-                                // deal maker modifies order intention from bid to ask
-                                outputs[2].data = formatOrderData(34955000000n, 25000000000n, 5000000000n, 50000000000n, true);
-                            });
-                            it('order lock contract rejects', async () => {
-                                let err = null;
-                                try {
+                            describe('success', () => {
+                                beforeEach(async () => {
                                     const rawTx = await generateRawTx(inputs, outputs, [sudtCellDep, orderCellDep]);
                                     const signedTx = rawTx;
                                     const signedWitnesses = ckb.signWitnesses(dealmakerPrivateKey)({
@@ -485,11 +445,56 @@ describe('order book', () => {
                                     signedTx.witnesses[0] = signedWitnesses[0];
 
                                     await sendTransaction(signedTx);
-                                } catch (error) {
-                                    err = error;
-                                }
+                                });
+                                it('updates the indexer data', async () => {
+                                    const aliceOrderCells = await indexer.collectCells({
+                                        lock: aliceOrderLock,
+                                    });
+                                    const bobOrderCells = await indexer.collectCells({
+                                        lock: bobOrderLock,
+                                    });
+                                    const dealmakerCells = await indexer.collectCells({
+                                        lock: dealmakerDefaultLock,
+                                    });
 
-                                expect(err).not.equal(null);
+                                    expect(BigInt(dealmakerCells[0].capacity).toString()).to.equal('2000224000000');
+
+                                    expect(BigInt(aliceOrderCells[0].capacity).toString()).to.equal('124775000000');
+                                    expect(BufferParser.parseAmountFromSUDTData(aliceOrderCells[0].data.slice(0, 34)).toString()).to.equal('20000000000');
+                                    expect(BufferParser.parseAmountFromSUDTData(`0x${aliceOrderCells[0].data.slice(34, 66)}`).toString()).to.equal('0');
+                                    expect(BufferParser.parseAmountFromSUDTData(`0x${aliceOrderCells[0].data.slice(66, 98)}`).toString()).to.equal('0');
+
+                                    expect(BigInt(bobOrderCells[0].capacity).toString()).to.equal('155000000000');
+                                    expect(BufferParser.parseAmountFromSUDTData(bobOrderCells[0].data.slice(0, 34)).toString()).to.equal('34955000000');
+                                    expect(BufferParser.parseAmountFromSUDTData(`0x${bobOrderCells[0].data.slice(34, 66)}`).toString()).to.equal('25000000000');
+                                    expect(BufferParser.parseAmountFromSUDTData(`0x${bobOrderCells[0].data.slice(66, 98)}`).toString()).to.equal('5000000000');
+                                });
+                            });
+                            describe('fails', () => {
+                                describe('deal maker tries to modify trade intention', () => {
+                                    beforeEach(async () => {
+                                        // deal maker modifies order intention from bid to ask
+                                        outputs[2].data = formatOrderData(34955000000n, 25000000000n, 5000000000n, price, true);
+                                    });
+                                    it('order lock contract rejects', async () => {
+                                        let err = null;
+                                        try {
+                                            const rawTx = await generateRawTx(inputs, outputs, [sudtCellDep, orderCellDep]);
+                                            const signedTx = rawTx;
+                                            const signedWitnesses = ckb.signWitnesses(dealmakerPrivateKey)({
+                                                transactionHash: ckb.utils.rawTransactionToHash(rawTx),
+                                                witnesses: [rawTx.witnesses[0]],
+                                            });
+                                            signedTx.witnesses[0] = signedWitnesses[0];
+
+                                            await sendTransaction(signedTx);
+                                        } catch (error) {
+                                            err = error;
+                                        }
+
+                                        expect(err).not.equal(null);
+                                    });
+                                });
                             });
                         });
                     });
