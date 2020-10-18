@@ -131,7 +131,7 @@ describe('order book', () => {
             const udtBinaryData = fs.readFileSync(udtBinaryPath);
             udtScriptDataHex = ckb.utils.bytesToHex(udtBinaryData);
 
-            const orderLockBinaryPath = path.join('/Users/kata/repos/dev/nervos/ckb-dex-contract', 'build/release/ckb-dex-contract');
+            const orderLockBinaryPath = path.join(__dirname, './ckb_dex_contract');
             const orderLockBinaryData = fs.readFileSync(orderLockBinaryPath);
             orderLockScriptDataHex = ckb.utils.bytesToHex(orderLockBinaryData);
 
