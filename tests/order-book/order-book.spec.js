@@ -510,6 +510,11 @@ describe('order book', () => {
                             const bobRawTx = await generateCreateOrderTx(bobOrder);
                             await sendTransaction(ckb.signTransaction(bobPrivateKey)(bobRawTx));
                         });
+                        it('creates order cells', async () => {
+                            const [, aliceOrderCell, bobOrderCell] = await collectOrderInputs();
+                            expect(aliceOrderCell).not.to.equal(null);
+                            expect(bobOrderCell).not.to.equal(null);
+                        });
                         describe('setup trades', () => {
                             let inputs;
                             let outputs;
@@ -654,6 +659,11 @@ describe('order book', () => {
                             });
                             await sendTransaction(ckb.signTransaction(bobPrivateKey)(bobRawTx));
                         });
+                        it('creates order cells', async () => {
+                            const [, aliceOrderCell, bobOrderCell] = await collectOrderInputs();
+                            expect(aliceOrderCell).not.to.equal(null);
+                            expect(bobOrderCell).not.to.equal(null);
+                        });
                         describe('setup trades', () => {
                             let inputs;
                             let outputs;
@@ -752,6 +762,11 @@ describe('order book', () => {
                                 ckbAmount: 800n * 10n ** 8n,
                             });
                             await sendTransaction(ckb.signTransaction(bobPrivateKey)(bobRawTx));
+                        });
+                        it('creates order cells', async () => {
+                            const [, aliceOrderCell, bobOrderCell] = await collectOrderInputs();
+                            expect(aliceOrderCell).not.to.equal(null);
+                            expect(bobOrderCell).not.to.equal(null);
                         });
                         describe('setup trades', () => {
                             let inputs;
