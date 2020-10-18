@@ -25,7 +25,7 @@ const readBigUInt128LE = (leHex) => {
 
 const parseAmountFromSUDTData = (leHex) => {
     try {
-        return readBigUInt128LE(leHex.slice(0, 34));
+        return readBigUInt128LE(leHex.startsWith('0x') ? leHex.slice(0, 34) : `0x${leHex.slice(0, 32)}`);
     } catch (error) {
         return BigInt(0);
     }
