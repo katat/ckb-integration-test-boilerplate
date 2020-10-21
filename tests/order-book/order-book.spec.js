@@ -196,7 +196,7 @@ describe('order book', () => {
         });
         describe('issuance', () => {
             let uuid;
-            let typeScript;
+            let sudtType;
             const issuanceAmount = BigInt('10000000000000000000000000000');
 
             beforeEach(async () => {
@@ -234,13 +234,13 @@ describe('order book', () => {
             });
             describe('transfer', () => {
                 beforeEach(async () => {
-                    typeScript = {
+                    sudtType = {
                         args: uuid,
                         hashType: 'type',
                         codeHash: ckb.utils.scriptToHash(typeIdScript),
                     };
                     const udtCell = (
-                        await indexer.collectCells({ lock: defaultLockScript, type: typeScript })
+                        await indexer.collectCells({ lock: defaultLockScript, type: sudtType })
                     )[0];
 
                     const inputs = [udtCell];
@@ -373,14 +373,14 @@ describe('order book', () => {
 
                         const changeOutput = {
                             ckbAmount: BigInt(inputs[0].capacity) - ckbAmount - 10n ** 8n,
-                            type: typeScript,
+                            type: sudtType,
                             lock: { ...defaultLockScript, args: publicKeyHash },
                             data: BufferParser.writeBigUInt128LE(BufferParser.parseAmountFromSUDTData(cells[0].data) - currentAmount),
                         };
                         const outputs = [
                             {
                                 ckbAmount,
-                                type: typeScript,
+                                type: sudtType,
                                 lock: orderLock,
                                 data: formatOrderData(currentAmount, tradedAmount, orderAmount, price, isBid),
                             },
