@@ -56,7 +56,7 @@ describe('order book', () => {
         };
     });
 
-    describe('deploy sudt', () => {
+    describe('deploy sudt and order lock', () => {
         let typeIdScript;
         let udtScriptDataHex;
         let orderLockScriptDataHex;
@@ -131,7 +131,7 @@ describe('order book', () => {
             const udtBinaryData = fs.readFileSync(udtBinaryPath);
             udtScriptDataHex = ckb.utils.bytesToHex(udtBinaryData);
 
-            const orderLockBinaryPath = path.join(__dirname, './ckb_dex_contract');
+            const orderLockBinaryPath = path.join(__dirname, './order-book-contract');
             const orderLockBinaryData = fs.readFileSync(orderLockBinaryPath);
             orderLockScriptDataHex = ckb.utils.bytesToHex(orderLockBinaryData);
 
@@ -307,13 +307,12 @@ describe('order book', () => {
                     expect(formatCKB(totalAmount).toString()).to.equal((20000n).toString());
                 });
                 describe('create order cells', () => {
-                    const formatOrderData = (currentAmount, tradedAmount, orderAmount, price, isBid) => {
+                    const formatOrderData = (currentAmount, orderAmount, price, isBid) => {
                         const udtAmountHex = BufferParser.writeBigUInt128LE(currentAmount);
-                        if (!orderAmount) {
+                        if (isBid === undefined) {
                             return udtAmountHex;
                         }
 
-                        const tradedAmountHex = BufferParser.writeBigUInt128LE(tradedAmount).replace('0x', '');
                         const orderAmountHex = BufferParser.writeBigUInt128LE(orderAmount).replace('0x', '');
 
                         const priceBuf = Buffer.alloc(8);
@@ -324,27 +323,25 @@ describe('order book', () => {
                         bidOrAskBuf.writeInt8(isBid ? 0 : 1);
                         const isBidHex = `${bidOrAskBuf.toString('hex')}`;
 
-                        const dataHex = udtAmountHex + tradedAmountHex + orderAmountHex + priceHex + isBidHex;
+                        const dataHex = udtAmountHex + orderAmountHex + priceHex + isBidHex;
                         return dataHex;
                     };
                     const parseOrderData = (hex) => {
                         const sUDTAmount = BufferParser.parseAmountFromSUDTData(hex.slice(0, 34));
-                        const tradedSUDTAmount = BufferParser.parseAmountFromSUDTData(hex.slice(34, 66));
-                        const orderAmount = BufferParser.parseAmountFromSUDTData(hex.slice(66, 98));
+                        const orderAmount = BufferParser.parseAmountFromSUDTData(hex.slice(34, 66));
 
                         let price;
                         try {
-                            const priceBuf = Buffer.from(hex.slice(98, 114), 'hex');
+                            const priceBuf = Buffer.from(hex.slice(66, 82), 'hex');
                             price = priceBuf.readBigInt64LE();
                         } catch (error) {
                             price = null;
                         }
 
-                        const isBid = hex.slice(114, 116) === '00';
+                        const isBid = hex.slice(82, 84) === '00';
 
                         return {
                             sUDTAmount,
-                            tradedSUDTAmount,
                             orderAmount,
                             price,
                             isBid,
@@ -353,7 +350,6 @@ describe('order book', () => {
                     const generateCreateOrderTx = async ({
                         publicKeyHash,
                         currentAmount,
-                        tradedAmount,
                         orderAmount,
                         price,
                         isBid,
@@ -382,7 +378,7 @@ describe('order book', () => {
                                 ckbAmount,
                                 type: sudtType,
                                 lock: orderLock,
-                                data: formatOrderData(currentAmount, tradedAmount, orderAmount, price, isBid),
+                                data: formatOrderData(currentAmount, orderAmount, price, isBid),
                             },
                             changeOutput,
                         ];
@@ -405,8 +401,13 @@ describe('order book', () => {
                         const currentSUDTAmount = BufferParser.parseAmountFromSUDTData(input.data.slice(0, 34));
                         let resultedSUDTAmount = currentSUDTAmount;
 
-                        const totalTradedSUDTAmount = BufferParser.parseAmountFromSUDTData(input.data.slice(34, 66)) + tradedSUDTAmount;
-                        const totalOrderAmount = BufferParser.parseAmountFromSUDTData(input.data.slice(66, 98)) - tradedSUDTAmount;
+                        let totalOrderAmount = BufferParser.parseAmountFromSUDTData(input.data.slice(34, 66));
+
+                        if (isBid) {
+                            totalOrderAmount -= tradedSUDTAmount;
+                        } else {
+                            totalOrderAmount -= tradedCKBAmount;
+                        }
 
                         if (isBid) {
                             resultedCKBAmount -= ckbTradeFee;
@@ -423,7 +424,6 @@ describe('order book', () => {
                         return {
                             resultedCKBAmount,
                             resultedSUDTAmount,
-                            totalTradedSUDTAmount,
                             totalOrderAmount,
                             currentCKBAmount,
                             currentSUDTAmount,
@@ -500,7 +500,6 @@ describe('order book', () => {
                             const aliceOrder = {
                                 publicKeyHash: alicePublicKeyHash,
                                 currentAmount: 5000000000n,
-                                tradedAmount: 5000000000n,
                                 orderAmount: 15000000000n,
                                 price: bidPrice,
                                 isBid: true,
@@ -509,8 +508,7 @@ describe('order book', () => {
                             const bobOrder = {
                                 publicKeyHash: bobPublicKeyHash,
                                 currentAmount: 50000000000n,
-                                tradedAmount: 10000000000n,
-                                orderAmount: 20000000000n,
+                                orderAmount: 100000000000n,
                                 price: askPrice,
                                 isBid: false,
                                 ckbAmount: 800n * 10n ** 8n,
@@ -555,7 +553,6 @@ describe('order book', () => {
                                         ckbAmount: newAliceOrderStates.resultedCKBAmount,
                                         data: formatOrderData(
                                             newAliceOrderStates.resultedSUDTAmount,
-                                            newAliceOrderStates.totalTradedSUDTAmount,
                                             newAliceOrderStates.totalOrderAmount,
                                             parseOrderData(aliceOrderCell.data).price,
                                             true,
@@ -567,7 +564,6 @@ describe('order book', () => {
                                         ckbAmount: newBobOrderStates.resultedCKBAmount,
                                         data: formatOrderData(
                                             newBobOrderStates.resultedSUDTAmount,
-                                            newBobOrderStates.totalTradedSUDTAmount,
                                             newBobOrderStates.totalOrderAmount,
                                             parseOrderData(bobOrderCell.data).price,
                                             false,
@@ -601,12 +597,16 @@ describe('order book', () => {
                                     expect(BigInt(aliceOrderCell.capacity).toString()).to.equal('124775000000');
                                     expect(BufferParser.parseAmountFromSUDTData(aliceOrderCell.data.slice(0, 34)).toString()).to.equal('20000000000');
                                     expect(BufferParser.parseAmountFromSUDTData(`0x${aliceOrderCell.data.slice(34, 66)}`).toString()).to.equal('0');
-                                    expect(BufferParser.parseAmountFromSUDTData(`0x${aliceOrderCell.data.slice(66, 98)}`).toString()).to.equal('0');
+                                    const bidPriceBuf = Buffer.from(aliceOrderCell.data.slice(66, 82), 'hex');
+                                    const bidPrice = bidPriceBuf.readBigInt64LE();
+                                    expect(bidPrice.toString()).to.equal('50000000000');
 
                                     expect(BigInt(bobOrderCell.capacity).toString()).to.equal('155000000000');
                                     expect(BufferParser.parseAmountFromSUDTData(bobOrderCell.data.slice(0, 34)).toString()).to.equal('34955000000');
                                     expect(BufferParser.parseAmountFromSUDTData(`0x${bobOrderCell.data.slice(34, 66)}`).toString()).to.equal('25000000000');
-                                    expect(BufferParser.parseAmountFromSUDTData(`0x${bobOrderCell.data.slice(66, 98)}`).toString()).to.equal('5000000000');
+                                    const askPriceBuf = Buffer.from(aliceOrderCell.data.slice(66, 82), 'hex');
+                                    const askPrice = askPriceBuf.readBigInt64LE();
+                                    expect(askPrice.toString()).to.equal('50000000000');
                                 });
                             });
                             describe('fails', () => {
@@ -614,13 +614,12 @@ describe('order book', () => {
                                     beforeEach(async () => {
                                         const {
                                             sUDTAmount,
-                                            tradedSUDTAmount,
                                             orderAmount,
                                             price,
                                             isBid,
                                         } = parseOrderData(outputs[2].data);
                                         // deal maker modifies order intention from bid to ask
-                                        outputs[2].data = formatOrderData(sUDTAmount, tradedSUDTAmount, orderAmount, price, !isBid);
+                                        outputs[2].data = formatOrderData(sUDTAmount, orderAmount, price, !isBid);
                                     });
                                     it('order lock contract rejects', async () => {
                                         let err = null;
@@ -651,7 +650,6 @@ describe('order book', () => {
                             const aliceRawTx = await generateCreateOrderTx({
                                 publicKeyHash: alicePublicKeyHash,
                                 currentAmount: 5000000000n,
-                                tradedAmount: 5000000000n,
                                 orderAmount: 15000000000n,
                                 price: bidPrice,
                                 isBid: true,
@@ -662,8 +660,7 @@ describe('order book', () => {
                             const bobRawTx = await generateCreateOrderTx({
                                 publicKeyHash: bobPublicKeyHash,
                                 currentAmount: 50000000000n,
-                                tradedAmount: 10000000000n,
-                                orderAmount: 20000000000n,
+                                orderAmount: 100000000000n,
                                 price: askPrice,
                                 isBid: false,
                                 ckbAmount: 800n * 10n ** 8n,
@@ -702,7 +699,6 @@ describe('order book', () => {
                                         ckbAmount: newAliceOrderStates.resultedCKBAmount,
                                         data: formatOrderData(
                                             newAliceOrderStates.resultedSUDTAmount,
-                                            newAliceOrderStates.totalTradedSUDTAmount,
                                             newAliceOrderStates.totalOrderAmount,
                                             parseOrderData(aliceOrderCell.data).price,
                                             true,
@@ -714,7 +710,6 @@ describe('order book', () => {
                                         ckbAmount: newBobOrderStates.resultedCKBAmount,
                                         data: formatOrderData(
                                             newBobOrderStates.resultedSUDTAmount,
-                                            newBobOrderStates.totalTradedSUDTAmount,
                                             newBobOrderStates.totalOrderAmount,
                                             parseOrderData(bobOrderCell.data).price,
                                             false,
@@ -755,7 +750,6 @@ describe('order book', () => {
                             const aliceRawTx = await generateCreateOrderTx({
                                 publicKeyHash: alicePublicKeyHash,
                                 currentAmount: 5000000000n,
-                                tradedAmount: 5000000000n,
                                 orderAmount: 15000000000n,
                                 price: bidPrice,
                                 isBid: true,
@@ -765,8 +759,7 @@ describe('order book', () => {
                             const bobRawTx = await generateCreateOrderTx({
                                 publicKeyHash: bobPublicKeyHash,
                                 currentAmount: 50000000000n,
-                                tradedAmount: 10000000000n,
-                                orderAmount: 20000000000n,
+                                orderAmount: 100000000000n,
                                 price: askPrice,
                                 isBid: false,
                                 ckbAmount: 800n * 10n ** 8n,
@@ -807,7 +800,6 @@ describe('order book', () => {
                                         ckbAmount: newAliceOrderStates.resultedCKBAmount,
                                         data: formatOrderData(
                                             newAliceOrderStates.resultedSUDTAmount,
-                                            newAliceOrderStates.totalTradedSUDTAmount,
                                             newAliceOrderStates.totalOrderAmount,
                                             parseOrderData(aliceOrderCell.data).price,
                                             true,
@@ -819,7 +811,6 @@ describe('order book', () => {
                                         ckbAmount: newBobOrderStates.resultedCKBAmount,
                                         data: formatOrderData(
                                             newBobOrderStates.resultedSUDTAmount,
-                                            newBobOrderStates.totalTradedSUDTAmount,
                                             newBobOrderStates.totalOrderAmount,
                                             parseOrderData(bobOrderCell.data).price,
                                             false,
