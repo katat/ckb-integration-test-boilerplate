@@ -127,6 +127,8 @@ const calculateTotalCapacities = (cells) => cells.reduce(
     BigInt(0),
 );
 
+const bigIntifyCKB = (hex) => BigInt(hex) / 10n ** 8n;
+
 module.exports = {
     NODE_URL,
     resetBlocks,
@@ -138,4 +140,5 @@ module.exports = {
     calculateTotalCapacities,
     sendTransaction,
     getCKBSDK,
+    bigIntifyCKB,
 };

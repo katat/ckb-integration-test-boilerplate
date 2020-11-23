@@ -74,6 +74,22 @@ lock.code_hash = "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3
 lock.args = "0xbe6058b94e3529e8b8f603616dcf727e85d6114f"
 lock.hash_type = "type"
 
+# private key: 0xb902874dd8afbf7d3b3c6cb7933a9151c4e8693fd41127f439ee0a2ee01bf705
+# args: 0x69220efdb4ac64e93d2a2cb80fbe9d75b56369b8
+[[genesis.issued_cells]]
+capacity = 10_000_000_000_00000000
+lock.code_hash = "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8"
+lock.args = "0x69220efdb4ac64e93d2a2cb80fbe9d75b56369b8"
+lock.hash_type = "type"
+
+# 0xc01560311b5156dba2777be844b8d5e6bcdc02d458f4d93eaf014e1470e3c959
+# 0xb63ac6c6b33b9691e5b19893c9459547b1544178
+[[genesis.issued_cells]]
+capacity = 10_000_000_000_00000000
+lock.code_hash = "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8"
+lock.args = "0xb63ac6c6b33b9691e5b19893c9459547b1544178"
+lock.hash_type = "type"
+
 [params]
 initial_primary_epoch_reward = 1_917_808_21917808
 secondary_epoch_reward = 613_698_63013698
