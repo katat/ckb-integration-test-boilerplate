@@ -345,7 +345,7 @@ describe('acp', () => {
 
                 const requiredCKB = 10000n;
                 const fee = 1n;
-                const changeCKB = bigIntifyCKB(input.capacity) - requiredCKB - fee;
+                const changeCKB = bigIntifyCKB(input.capacity) - (requiredCKB * 2n) - fee;
 
                 const inputs = [input];
                 const outputs = [
@@ -353,10 +353,10 @@ describe('acp', () => {
                         ckb: requiredCKB,
                         lock: { ...defaultLockScript, args: publicKeyHash2 },
                     },
-                    // {
-                    //     ckb: requiredCKB,
-                    //     lock: { ...defaultLockScript, args: publicKeyHash3 },
-                    // },
+                    {
+                        ckb: requiredCKB,
+                        lock: { ...defaultLockScript, args: publicKeyHash3 },
+                    },
                     {
                         ckb: changeCKB,
                         lock: input.lock,
@@ -397,6 +397,12 @@ describe('acp', () => {
                         acpTypeIdScript,
                         1000n,
                         { publicKeyHash: publicKeyHash2, privateKey: privateKey2 },
+                    );
+
+                    await createACPForCKB(
+                        acpTypeIdScript,
+                        1000n,
+                        { publicKeyHash: publicKeyHash3, privateKey: privateKey3 },
                     );
 
                     // const cells = await indexer.collectCells({ type: typeIdScript });
