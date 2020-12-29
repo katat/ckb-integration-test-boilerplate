@@ -159,6 +159,71 @@ describe('acp', () => {
             const hash = await sendTransaction(signed);
             return { txHash: hash, typeIdScript: acpTypeIdScript };
         };
+        const deployCheque = async () => {
+            const binaryPath = path.join('/Users/kata/dev/nervos/ckb-cheque-script/build/release/ckb-cheque-script');
+            const binaryData = fs.readFileSync(binaryPath);
+
+            const dataHex = ckb.utils.bytesToHex(binaryData);
+            const cells = await indexer.collectCells({ lock: defaultLockScript });
+            const input = cells.find((cell) => cell.data === '0x');
+            const inputs = [input];
+
+            const typeIdHash = calculateTypeIdHash(input.outPoint);
+
+            const chequeTypeIdScript = {
+                hashType: 'type',
+                codeHash: '0x00000000000000000000000000000000000000000000000000545950455f4944',
+                args: typeIdHash,
+            };
+
+            const fee = 1n;
+            const requiredCKB = 61n + 64n + BigInt(dataHex.length / 2);
+            const changeCKB = bigIntifyCKB(input.capacity) - requiredCKB - fee;
+            const outputs = [{
+                ckb: requiredCKB,
+                lock: input.lock,
+                type: chequeTypeIdScript,
+                data: dataHex,
+            }, {
+                ckb: changeCKB,
+                lock: input.lock,
+            }];
+
+            const rawTx = await generateRawTx(inputs, outputs);
+            const signed = ckb.signTransaction(privateKey)(rawTx);
+            const hash = await sendTransaction(signed);
+            return { txHash: hash, index: '0x0', typeIdScript: chequeTypeIdScript };
+        };
+        const deploySignhashAllDual = async () => {
+            const binaryPath = path.join('/Users/kata/dev/nervos/ckb-cheque-script/ckb-miscellaneous-scripts/build/secp256k1_blake2b_sighash_all_dual');
+            const binaryData = fs.readFileSync(binaryPath);
+
+            const b = ckb.utils.blake2b(32, null, null, ckb.utils.PERSONAL);
+            b.update(binaryData);
+            const codeHash = `0x${b.digest('hex')}`;
+
+            const dataHex = ckb.utils.bytesToHex(binaryData);
+            const cells = await indexer.collectCells({ lock: defaultLockScript });
+            const input = cells.find((cell) => cell.data === '0x');
+            const inputs = [input];
+
+            const fee = 1n;
+            const requiredCKB = 61n + 64n + BigInt(dataHex.length / 2);
+            const changeCKB = bigIntifyCKB(input.capacity) - requiredCKB - fee;
+            const outputs = [{
+                ckb: requiredCKB,
+                lock: input.lock,
+                data: dataHex,
+            }, {
+                ckb: changeCKB,
+                lock: input.lock,
+            }];
+
+            const rawTx = await generateRawTx(inputs, outputs);
+            const signed = ckb.signTransaction(privateKey)(rawTx);
+            const hash = await sendTransaction(signed);
+            return { txHash: hash, index: '0x0', codeHash };
+        };
         const deployACPDepGroup = async (txHash) => {
             const cells = await indexer.collectCells({ lock: defaultLockScript });
             const input = cells.find((cell) => cell.data === '0x');
@@ -177,6 +242,47 @@ describe('acp', () => {
             ]);
 
             const requiredCKB = 141n;
+            const fee = 1n;
+            const changeCKB = bigIntifyCKB(input.capacity) - requiredCKB - fee;
+            const inputs = [input];
+            const outputs = [{
+                ckb: requiredCKB,
+                lock: input.lock,
+                data: serializedOutPoints,
+            }, {
+                ckb: changeCKB,
+                lock: input.lock,
+            }];
+
+            const rawTx = await generateRawTx(inputs, outputs);
+            signedTx = ckb.signTransaction(privateKey)(rawTx);
+
+            const depGroupTxHash = await sendTransaction(signedTx);
+            const depGroupTxIndex = '0x0';
+
+            return {
+                txHash: depGroupTxHash,
+                index: depGroupTxIndex,
+            };
+        };
+        const deployChequeDepGroup = async (outpoints) => {
+            const cells = await indexer.collectCells({ lock: defaultLockScript });
+            const input = cells.find((cell) => cell.data === '0x');
+            const serializedDepOutPoints = outpoints.map(({ txHash, index }) => serializeOutPoint({ txHash, index }));
+
+            const genesisBlock = await ckb.rpc.getBlockByNumber('0x0');
+            const secpOutPointTxHash = genesisBlock.transactions[0].hash;
+
+            const serializedSecp256DataOutPoint = serializeOutPoint({
+                txHash: secpOutPointTxHash,
+                index: '0x3',
+            });
+            const serializedOutPoints = serializeFixVec([
+                ...serializedDepOutPoints,
+                serializedSecp256DataOutPoint,
+            ]);
+
+            const requiredCKB = 241n;
             const fee = 1n;
             const changeCKB = bigIntifyCKB(input.capacity) - requiredCKB - fee;
             const inputs = [input];
@@ -331,6 +437,12 @@ describe('acp', () => {
             const deployedACPDepGroupResult1 = await deployACPDepGroup(deployedAcpResult.txHash);
             acpDepGroup1.txHash = deployedACPDepGroupResult1.txHash;
             acpDepGroup1.index = deployedACPDepGroupResult1.index;
+
+            const deployedCheque = await deployCheque();
+            const deployedSignDual = await deploySignhashAllDual();
+            const deployedChequeDepGroup = await deployChequeDepGroup([deployedCheque, deployedSignDual]);
+            console.log('deployed cheque type id hash', ckb.utils.scriptToHash(deployedCheque.typeIdScript));
+            console.log('deployed cheque dep group', deployedChequeDepGroup);
         });
         it('deployed type id script for sudt', async () => {
             const cells = await indexer.collectCells({ type: typeIdScript });
@@ -418,8 +530,8 @@ describe('acp', () => {
                     console.log('sudt cell dep', sudtCellDep);
 
                     // console.log(anotherDeployedAcpResult)
-                    console.log('legacy acp type id hash', ckb.utils.scriptToHash(deployedAcpResult.typeIdScript))
-                    console.log('new acp type id hash', ckb.utils.scriptToHash(anotherDeployedAcpResult.typeIdScript))
+                    console.log('legacy acp type id hash', ckb.utils.scriptToHash(deployedAcpResult.typeIdScript));
+                    console.log('new acp type id hash', ckb.utils.scriptToHash(anotherDeployedAcpResult.typeIdScript));
                 });
                 it('issued sudt', async () => {
                     const type = {
